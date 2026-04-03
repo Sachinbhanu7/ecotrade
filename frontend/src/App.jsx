@@ -28,7 +28,7 @@ function App() {
           <Route path="/contact" element={<Navigate to="/" />} />
           
           {/* Protected Routes */}
-          <Route path="/dashboard/buyer" element={user?.role === 'buyer' ? <BuyerDashboard /> : <Navigate to="/login" />} />
+          <Route path="/dashboard/buyer" element={user ? <BuyerDashboard /> : <Navigate to="/login" />} />
           <Route path="/dashboard/seller" element={user?.role === 'seller' ? <SellerDashboard /> : <Navigate to="/login" />} />
           <Route path="/premium" element={<Premium />} />
         </Routes>

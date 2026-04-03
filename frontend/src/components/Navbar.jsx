@@ -21,11 +21,9 @@ const Navbar = () => {
                   <Crown className="w-4 h-4" />
                   Premium Plans
                 </Link>
-                {user.role === 'buyer' && (
-                  <Link to="/dashboard/buyer" className="flex items-center gap-2 text-green-600 hover:text-green-700 font-medium transition-colors">
-                    Explore Listings
-                  </Link>
-                )}
+                <Link to="/dashboard/buyer" className="flex items-center gap-2 text-green-600 hover:text-green-700 font-medium transition-colors">
+                  Explore Listings
+                </Link>
                 <Link 
                   to={`/dashboard/${user.role}`} 
                   className="flex items-center gap-2 text-slate-600 hover:text-slate-900 font-medium transition-colors"

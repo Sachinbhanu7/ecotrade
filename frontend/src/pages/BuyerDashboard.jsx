@@ -2,23 +2,35 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import useStore from '../store/useStore';
-import { IndianRupee, MapPin, Tag, Filter, LockKeyhole, Crown, X, Info } from 'lucide-react';
+import { IndianRupee, MapPin, Tag, Filter, LockKeyhole, Crown, X, Info, LayoutTemplate, Activity, User } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 const BuyerDashboard = () => {
   const [items, setItems] = useState([]);
   const [bids, setBids] = useState([]);
+  const [historyItems, setHistoryItems] = useState([]);
   const [bidAmount, setBidAmount] = useState('');
   const [filter, setFilter] = useState('All');
   const [selectedItem, setSelectedItem] = useState(null);
+  const [activeTab, setActiveTab] = useState('Explore'); // Explore, MyBids, Profile
   const { user } = useStore();
 
   const fetchData = async () => {
     try {
       const itemsRes = await axios.get('http://localhost:5000/api/items/approved');
       setItems(itemsRes.data);
-      const bidsRes = await axios.get(`http://localhost:5000/api/bids/buyer/${user.id}`);
-      setBids(bidsRes.data);
+      
+      let bidsData = [];
+      if (user.role === 'buyer') {
+        const bidsRes = await axios.get(`http://localhost:5000/api/bids/buyer/${user.id}`);
+        bidsData = bidsRes.data;
+        setBids(bidsData);
+
+        // Fetch items specifically for bid history (to see sold items)
+        const myBidItemsIds = [...new Set(bidsData.map(b => b.itemId))];
+        const hItems = await Promise.all(myBidItemsIds.map(id => axios.get(`http://localhost:5000/api/items/${id}`).catch(()=>null)));
+        setHistoryItems(hItems.map(res => res?.data).filter(Boolean));
+      }
     } catch (error) {
       console.error(error);
     }
@@ -31,6 +43,10 @@ const BuyerDashboard = () => {
   }, []);
 
   const handleBid = async (itemId) => {
+    if (user.role !== 'buyer') {
+      alert("Only registered buyers can place bids. You are logged in as a Seller.");
+      return;
+    }
     if (!bidAmount) return;
 
     try {
@@ -48,111 +64,176 @@ const BuyerDashboard = () => {
     }
   };
 
+  const renderItemCard = (item, isHistoryView = false) => {
+    const myBids = bids.filter(b => b.itemId === item.id).sort((a,b) => b.amount - a.amount);
+    const hasWinningBid = myBids.some(b => b.status === 'accepted');
+    const isSold = item.status === 'sold' && !hasWinningBid;
+    const isLocked = item.isPremium && !user.isPremium;
+
+    return (
+      <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col relative group cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all" onClick={() => !isLocked && setSelectedItem(item)}>
+        {isLocked && !isHistoryView && (
+           <div className="absolute inset-0 z-10 bg-white/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center cursor-default" onClick={e => e.stopPropagation()}>
+             <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-4 shadow-sm">
+               <LockKeyhole className="w-8 h-8 text-amber-600" />
+             </div>
+             <h3 className="text-xl font-bold text-slate-900 mb-2">Premium Listing</h3>
+             <p className="text-sm text-slate-600 mb-6 font-medium">This high-value scrap batch is reserved exclusively for Premium members.</p>
+             <Link to="/premium" className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center gap-2">
+               <Crown className="w-4 h-4" /> Upgrade to View
+             </Link>
+           </div>
+        )}
+        
+        <div className={`h-56 overflow-hidden relative ${isLocked && !isHistoryView ? 'blur-sm' : ''}`}>
+          <img src={item.images[0]} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+          <div className="absolute top-4 left-4 flex flex-col gap-2">
+            <span className="px-3 py-1 bg-white/95 backdrop-blur text-xs font-bold rounded-full shadow border border-white/20 text-slate-800 flex items-center gap-1 uppercase tracking-wide">
+              {item.category}
+            </span>
+            {item.isPremium && (
+              <span className="px-3 py-1 bg-amber-500/90 text-white backdrop-blur text-xs font-bold rounded-full shadow flex items-center gap-1 uppercase">
+                <Crown className="w-3 h-3" /> Premium
+              </span>
+            )}
+          </div>
+          {hasWinningBid && (
+            <div className="absolute inset-0 bg-green-500/20 backdrop-blur-sm flex items-center justify-center">
+              <span className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg shadow-lg rotate-12 text-lg">
+                DEAL WON 🎉
+              </span>
+            </div>
+          )}
+          {isSold && (
+            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center">
+              <span className="px-5 py-3 bg-slate-900 text-white font-bold rounded-xl shadow-2xl tracking-widest uppercase">
+                Sold Out
+              </span>
+            </div>
+          )}
+        </div>
+        
+        <div className="p-6 flex-1 flex flex-col">
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="text-xl font-bold text-slate-800 line-clamp-1">{item.title}</h3>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-500 mb-4 bg-slate-50 p-2 rounded-lg border border-slate-100">
+            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="line-clamp-1">{item.address}</span>
+          </div>
+          
+          <div className="mt-auto pt-4 border-t border-slate-100">
+             {myBids.length > 0 ? (
+                <div className={`flex justify-between items-center px-4 py-2.5 rounded-xl border ${hasWinningBid ? 'bg-green-50 text-green-700 border-green-200' : myBids[0].status === 'rejected' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                  <span className="font-bold text-sm">Your Bid: ₹{myBids[0].amount.toLocaleString()}</span>
+                  <span className="text-xs uppercase font-bold bg-white/50 px-2 py-0.5 rounded">{myBids[0].status}</span>
+                </div>
+             ) : (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 text-xs font-medium">Click to view details</span>
+                  <button className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-colors shadow-sm">View & Bid</button>
+                </div>
+             )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Available Scrap Listings</h1>
-          <p className="text-slate-500">Browse verified listings and place your competitive bids.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {['All', 'Metal', 'Plastic', 'Copper', 'E-Waste', 'Paper'].map(cat => (
-            <button 
-              key={cat} onClick={() => setFilter(cat)}
-              className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${filter === cat ? 'bg-slate-900 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-            >
-              {filter === cat && <Filter className="w-3.5 h-3.5" />} {cat}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {items.filter(i => filter === 'All' ? true : i.category.toLowerCase() === filter.toLowerCase()).map(item => {
-          const myBids = bids.filter(b => b.itemId === item.id);
-          const hasWinningBid = myBids.some(b => b.status === 'accepted');
-          const isSold = item.status === 'sold' && !hasWinningBid;
-          const isLocked = item.isPremium && !user.isPremium;
-
-          return (
-            <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col relative group cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all" onClick={() => !isLocked && setSelectedItem(item)}>
-              {isLocked && (
-                 <div className="absolute inset-0 z-10 bg-white/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center cursor-default" onClick={e => e.stopPropagation()}>
-                   <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-4 shadow-sm">
-                     <LockKeyhole className="w-8 h-8 text-amber-600" />
-                   </div>
-                   <h3 className="text-xl font-bold text-slate-900 mb-2">Premium Listing</h3>
-                   <p className="text-sm text-slate-600 mb-6 font-medium">This high-value scrap batch is reserved exclusively for Premium members.</p>
-                   <Link to="/premium" className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center gap-2">
-                     <Crown className="w-4 h-4" /> Upgrade to View
-                   </Link>
-                 </div>
-              )}
-              
-              <div className={`h-56 overflow-hidden relative ${isLocked ? 'blur-sm' : ''}`}>
-                <img src={item.images[0]} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                <div className="absolute top-4 left-4 flex flex-col gap-2">
-                  <span className="px-3 py-1 bg-white/95 backdrop-blur text-xs font-bold rounded-full shadow border border-white/20 text-slate-800 flex items-center gap-1 uppercase tracking-wide">
-                    {item.category}
-                  </span>
-                  {item.isPremium && (
-                    <span className="px-3 py-1 bg-amber-500/90 text-white backdrop-blur text-xs font-bold rounded-full shadow flex items-center gap-1 uppercase">
-                      <Crown className="w-3 h-3" /> Premium
-                    </span>
-                  )}
-                </div>
-                {hasWinningBid && (
-                  <div className="absolute inset-0 bg-green-500/20 backdrop-blur-sm flex items-center justify-center">
-                    <span className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg shadow-lg rotate-12 text-lg">
-                      BID ACCEPTED 🎉
-                    </span>
-                  </div>
-                )}
-                {isSold && (
-                  <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center">
-                    <span className="px-5 py-3 bg-slate-900 text-white font-bold rounded-xl shadow-2xl tracking-widest uppercase">
-                      Sold Out
-                    </span>
-                  </div>
-                )}
-              </div>
-              
-              <div className="p-6 flex-1 flex flex-col">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-xl font-bold text-slate-800 line-clamp-1">{item.title}</h3>
-                </div>
-                <div className="flex items-center gap-2 text-xs font-medium text-slate-500 mb-4 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span className="line-clamp-1">{item.address}</span>
-                </div>
-                
-                <div className="mt-auto pt-4 border-t border-slate-100">
-                   {myBids.length > 0 ? (
-                      <div className="flex justify-between items-center bg-blue-50 text-blue-700 px-4 py-2.5 rounded-xl border border-blue-100">
-                        <span className="font-bold text-sm">Your Bid: ₹{Math.max(...myBids.map(b => b.amount)).toLocaleString()}</span>
-                        <span className="text-xs uppercase font-bold bg-blue-200/50 px-2 py-0.5 rounded">{myBids[0].status}</span>
-                      </div>
-                   ) : (
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-xs font-medium">Click to view details</span>
-                        <button className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-colors shadow-sm">View & Bid</button>
-                      </div>
-                   )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-        {items.filter(i => filter === 'All' ? true : i.category.toLowerCase() === filter.toLowerCase()).length === 0 && (
-          <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-slate-200 border-dashed">
-            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-               <Info className="w-8 h-8 text-slate-400"/>
-            </div>
-            <h3 className="text-xl font-bold text-slate-800 mb-2">No items found</h3>
-            <p className="text-slate-500 font-medium">No verified scrap listings available in this category right now.</p>
-          </div>
+      
+      {/* Dashboard Navigation */}
+      <div className="flex gap-4 mb-8 border-b border-slate-200 pb-4 overflow-x-auto">
+        <button onClick={() => setActiveTab('Explore')} className={`flex flex-shrink-0 items-center gap-2 px-5 py-2.5 rounded-full font-bold transition-colors ${activeTab === 'Explore' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>
+          <LayoutTemplate className="w-5 h-5" /> Explore Scrap
+        </button>
+        {user.role === 'buyer' && (
+          <button onClick={() => setActiveTab('MyBids')} className={`flex flex-shrink-0 items-center gap-2 px-5 py-2.5 rounded-full font-bold transition-colors ${activeTab === 'MyBids' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>
+            <Activity className="w-5 h-5" /> My Bid History
+          </button>
         )}
+        <button onClick={() => setActiveTab('Profile')} className={`flex flex-shrink-0 items-center gap-2 px-5 py-2.5 rounded-full font-bold transition-colors ${activeTab === 'Profile' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>
+          <User className="w-5 h-5" /> Profile Settings
+        </button>
       </div>
+
+      {activeTab === 'Profile' && (
+        <div className="max-w-3xl mx-auto bg-white rounded-3xl p-8 border border-slate-200 shadow-sm text-center">
+          <div className="w-24 h-24 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-4xl font-bold mx-auto mb-4">
+            {user.name.charAt(0)}
+          </div>
+          <h2 className="text-3xl font-extrabold text-slate-900 mb-1">{user.name}</h2>
+          <p className="text-slate-500 font-medium mb-6">{user.email}</p>
+          
+          <div className="flex justify-center gap-4 mb-8">
+            <span className="bg-slate-100 text-slate-700 px-4 py-1.5 rounded-full text-sm font-bold uppercase tracking-widest">{user.role} Account</span>
+            {user.isPremium && <span className="bg-amber-100 text-amber-700 px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-1 uppercase tracking-widest"><Crown className="w-4 h-4"/> Premium</span>}
+          </div>
+
+          {user.role === 'buyer' && (
+            <div className="grid grid-cols-2 gap-4 text-left">
+              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                <p className="text-slate-400 font-bold mb-1 uppercase text-xs">Total Bids Placed</p>
+                <p className="text-3xl font-extrabold text-slate-900">{bids.length}</p>
+              </div>
+              <div className="bg-green-50 p-6 rounded-2xl border border-green-100">
+                <p className="text-green-600/80 font-bold mb-1 uppercase text-xs">Bids Won</p>
+                <p className="text-3xl font-extrabold text-green-700">{bids.filter(b => b.status === 'accepted').length}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'MyBids' && user.role === 'buyer' && (
+        <>
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">My Bid History</h1>
+            <p className="text-slate-500">Track all items you have bid on, regardless of their current market status.</p>
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {historyItems.map(item => renderItemCard(item, true))}
+            {historyItems.length === 0 && (
+              <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-slate-200 border-dashed">
+                <h3 className="text-xl font-bold text-slate-800 mb-2">No History</h3>
+                <p className="text-slate-500 font-medium">You haven't placed any bids yet.</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeTab === 'Explore' && (
+        <>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900 mb-2">Available Scrap Listings</h1>
+              <p className="text-slate-500">Browse verified listings and place your competitive bids.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {['All', 'Metal', 'Plastic', 'Copper', 'E-Waste', 'Paper'].map(cat => (
+                <button 
+                  key={cat} onClick={() => setFilter(cat)}
+                  className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${filter === cat ? 'bg-slate-900 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                >
+                  {filter === cat && <Filter className="w-3.5 h-3.5" />} {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {items.filter(i => filter === 'All' ? true : i.category.toLowerCase() === filter.toLowerCase()).map(item => renderItemCard(item, false))}
+            {items.filter(i => filter === 'All' ? true : i.category.toLowerCase() === filter.toLowerCase()).length === 0 && (
+              <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-slate-200 border-dashed">
+                <h3 className="text-xl font-bold text-slate-800 mb-2">No items found</h3>
+                <p className="text-slate-500 font-medium">No verified scrap listings available in this category right now.</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* AMAZON-STYLE PRODUCT DETAIL MODAL */}
       {selectedItem && (
@@ -203,7 +284,9 @@ const BuyerDashboard = () => {
                    const hasWinningBid = myBids.some(b => b.status === 'accepted');
                    const isSold = selectedItem.status === 'sold' && !hasWinningBid;
 
+                   if (user.role === 'seller') return <div className="bg-amber-50 border border-amber-200 text-amber-800 p-6 rounded-2xl text-center"><h3 className="text-xl font-bold mb-2">Login Required</h3><p>You are viewing this as a Seller. Please use a Buyer account to place bids.</p></div>;
                    if (hasWinningBid) return <div className="bg-green-100 border border-green-300 text-green-800 p-6 rounded-2xl text-center"><h3 className="text-2xl font-bold mb-2">🎉 Deal Finalized!</h3><p>The seller accepted your bid of ₹{myBids.find(b=>b.status==='accepted').amount.toLocaleString()}. They will contact you shortly.</p></div>;
+                   if (myBids.some(b => b.status === 'rejected')) return <div className="bg-red-50 border border-red-200 text-red-800 p-6 rounded-2xl text-center"><h3 className="text-xl font-bold mb-2">Bid Rejected</h3><p>Unfortunately, the seller declined your bid of ₹{myBids.find(b=>b.status==='rejected').amount.toLocaleString()}.</p></div>;
                    if (isSold) return <div className="bg-slate-100 border border-slate-300 text-slate-600 p-6 rounded-2xl text-center"><h3 className="text-2xl font-bold">Sold Out</h3><p>This item has already been secured by another buyer.</p></div>;
                    
                    return (
