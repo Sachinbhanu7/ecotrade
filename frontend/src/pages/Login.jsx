@@ -19,7 +19,7 @@ const Login = () => {
       setUser(res.data.user);
       navigate(res.data.user.role === 'buyer' ? '/dashboard/buyer' : '/dashboard/seller');
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid credentials');
+      setError(err.response?.data?.error || err.response?.data?.message || 'Invalid credentials');
     }
   };
 

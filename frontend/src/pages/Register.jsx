@@ -23,7 +23,7 @@ const Register = () => {
       setUser(res.data.user);
       navigate(res.data.user.role === 'buyer' ? '/dashboard/buyer' : '/dashboard/seller');
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed');
+      setError(err.response?.data?.error || err.response?.data?.message || 'Registration failed');
     }
   };
 
