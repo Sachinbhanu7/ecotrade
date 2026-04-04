@@ -17,18 +17,18 @@ const BuyerDashboard = () => {
 
   const fetchData = async () => {
     try {
-      const itemsRes = await axios.get('http://localhost:5000/api/items/approved');
+      const itemsRes = await axios.get('/api/items/approved');
       setItems(itemsRes.data);
       
       let bidsData = [];
       if (user.role === 'buyer') {
-        const bidsRes = await axios.get(`http://localhost:5000/api/bids/buyer/${user.id}`);
+        const bidsRes = await axios.get(`/api/bids/buyer/${user.id}`);
         bidsData = bidsRes.data;
         setBids(bidsData);
 
         // Fetch items specifically for bid history (to see sold items)
         const myBidItemsIds = [...new Set(bidsData.map(b => b.itemId))];
-        const hItems = await Promise.all(myBidItemsIds.map(id => axios.get(`http://localhost:5000/api/items/${id}`).catch(()=>null)));
+        const hItems = await Promise.all(myBidItemsIds.map(id => axios.get(`/api/items/${id}`).catch(()=>null)));
         setHistoryItems(hItems.map(res => res?.data).filter(Boolean));
       }
     } catch (error) {
@@ -50,7 +50,7 @@ const BuyerDashboard = () => {
     if (!bidAmount) return;
 
     try {
-      await axios.post('http://localhost:5000/api/bids', {
+      await axios.post('/api/bids', {
         itemId,
         buyerId: user.id,
         buyerName: user.name,

@@ -3,9 +3,17 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const admin = require('firebase-admin');
 
-const serviceAccount = require('./firebaseKey.json');
+let serviceAccount;
+try {
+  serviceAccount = require('./firebaseKey.json');
+} catch (error) {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } else {
+    console.error("FIREBASE_SERVICE_ACCOUNT env variable is missing!");
+  }
+}
 
-// Initialize Firebase Admin
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });

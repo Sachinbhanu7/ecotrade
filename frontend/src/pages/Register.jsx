@@ -19,7 +19,7 @@ const Register = () => {
     e.preventDefault();
     setError('');
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/register', formData);
+      const res = await axios.post('/api/auth/register', formData);
       setUser(res.data.user);
       navigate(res.data.user.role === 'buyer' ? '/dashboard/buyer' : '/dashboard/seller');
     } catch (err) {

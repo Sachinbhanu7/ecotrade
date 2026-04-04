@@ -18,7 +18,7 @@ const Premium = () => {
     alert("DEMO: Redirecting to Payment Gateway (Stripe/Razorpay)...");
     
     try {
-      const res = await axios.put(`http://localhost:5000/api/users/${user.id}/premium`);
+      const res = await axios.put(`/api/users/${user.id}/premium`);
       setUser(res.data.user);
       alert("Payment Successful! Premium Activated. You now have unlimited access.");
       navigate(`/dashboard/${user.role}`);

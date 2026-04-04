@@ -17,9 +17,9 @@ const SellerDashboard = () => {
 
   const fetchData = async () => {
     try {
-      const itemsRes = await axios.get(`http://localhost:5000/api/items/seller/${user.id}`);
+      const itemsRes = await axios.get(`/api/items/seller/${user.id}`);
       setItems(itemsRes.data);
-      const bidsRes = await axios.get(`http://localhost:5000/api/bids/seller/${user.id}`);
+      const bidsRes = await axios.get(`/api/bids/seller/${user.id}`);
       setBids(bidsRes.data);
     } catch (error) {
       console.error(error);
@@ -46,7 +46,7 @@ const SellerDashboard = () => {
   const handleAddItem = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5000/api/items', {
+      await axios.post('/api/items', {
         ...formData,
         sellerId: user.id,
         sellerName: user.name,
@@ -62,7 +62,7 @@ const SellerDashboard = () => {
 
   const handleBidAction = async (bidId, status) => {
     try {
-      await axios.put(`http://localhost:5000/api/bids/${bidId}/status`, { status });
+      await axios.put(`/api/bids/${bidId}/status`, { status });
       fetchData();
     } catch (err) {
       alert("Failed to update bid");

@@ -13,7 +13,7 @@ const Login = ({ setAuth }) => {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', { email, password });
+      const res = await axios.post('/api/auth/login', { email, password });
       if (res.data.user.role === 'admin') {
         localStorage.setItem('admin_auth', 'true');
         setAuth(true);
@@ -60,13 +60,13 @@ const Dashboard = ({ setAuth }) => {
 
   const fetchData = async () => {
     try {
-      const itemsRes = await axios.get('http://localhost:5000/api/items');
+      const itemsRes = await axios.get('/api/items');
       setItems(itemsRes.data);
-      const statsRes = await axios.get('http://localhost:5000/api/stats');
+      const statsRes = await axios.get('/api/stats');
       setStats(statsRes.data);
-      const usersRes = await axios.get('http://localhost:5000/api/users');
+      const usersRes = await axios.get('/api/users');
       setUsers(usersRes.data);
-      const bidsRes = await axios.get('http://localhost:5000/api/bids');
+      const bidsRes = await axios.get('/api/bids');
       setAllBids(bidsRes.data);
     } catch(e) { console.error(e); }
   };
@@ -79,7 +79,7 @@ const Dashboard = ({ setAuth }) => {
 
   const handleStatusUpdate = async (id, status) => {
     try {
-      await axios.put(`http://localhost:5000/api/items/${id}/status`, { status });
+      await axios.put(`/api/items/${id}/status`, { status });
       fetchData();
       if(activeModal?.id === id) setActiveModal({...activeModal, status});
     } catch(e) { alert("Action failed"); }
@@ -87,7 +87,7 @@ const Dashboard = ({ setAuth }) => {
 
   const handlePremiumToggle = async (id) => {
     try {
-      await axios.put(`http://localhost:5000/api/items/${id}/premium`);
+      await axios.put(`/api/items/${id}/premium`);
       fetchData();
       if(activeModal?.id === id) setActiveModal({...activeModal, isPremium: !activeModal.isPremium});
     } catch(e) { alert("Action failed"); }
