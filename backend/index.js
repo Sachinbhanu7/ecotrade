@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const admin = require('firebase-admin');
 
 let serviceAccount;
@@ -58,7 +58,7 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ message: "User already exists" });
     }
     
-    const id = uuidv4();
+    const id = crypto.randomUUID();
     const user = { id, name, email, password, role, isPremium: false };
     await usersRef.doc(id).set(user);
     res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, isPremium: user.isPremium } });
@@ -133,7 +133,7 @@ app.get('/api/items/:id', async (req, res) => {
 
 app.post('/api/items', async (req, res) => {
   try {
-    const id = uuidv4();
+    const id = crypto.randomUUID();
     const item = { ...req.body, id, status: 'pending', createdAt: new Date().toISOString() };
     if (!item.isPremium) item.isPremium = false;
     await db.collection('items').doc(id).set(item);
@@ -184,7 +184,7 @@ app.get('/api/bids', async (req, res) => {
 
 app.post('/api/bids', async (req, res) => {
   try {
-    const id = uuidv4();
+    const id = crypto.randomUUID();
     const bid = { ...req.body, id, status: 'pending', createdAt: new Date().toISOString() };
     await db.collection('bids').doc(id).set(bid);
     res.json(bid);
