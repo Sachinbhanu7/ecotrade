@@ -4,29 +4,44 @@ const { v4: uuidv4 } = require('uuid');
 const admin = require('firebase-admin');
 
 let serviceAccount;
+let firebaseError = null;
+let db;
+
 try {
-  serviceAccount = require('./firebaseKey.json');
-} catch (error) {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    if (serviceAccount.private_key) {
-      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+  try {
+    serviceAccount = require('./firebaseKey.json');
+  } catch (error) {
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+      throw new Error("Missing FIREBASE_SERVICE_ACCOUNT env variable.");
     }
-  } else {
-    console.error("FIREBASE_SERVICE_ACCOUNT env variable is missing!");
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   }
+
+  if (serviceAccount && serviceAccount.private_key) {
+    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+  }
+
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+  db = admin.firestore();
+} catch (err) {
+  firebaseError = err.message;
+  console.error("FIREBASE INIT FATAL ERROR:", err);
 }
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
-
-const db = admin.firestore();
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Middleware to catch the exact error if Firebase failed to boot
+app.use((req, res, next) => {
+  if (firebaseError) {
+    return res.status(500).json({ error: `Backend Boot Error: ${firebaseError}. Please check Vercel ENV Variables.` });
+  }
+  next();
+});
 
 // ----------------------------------------
 // AUTHENTICATION
