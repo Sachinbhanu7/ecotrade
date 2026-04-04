@@ -16,30 +16,18 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/backend/index.js"
-    },
-    {
-      "src": "/admin-panel/(.*)",
-      "dest": "/dist/admin-panel/$1"
-    },
-    {
-      "src": "/admin-panel",
-      "dest": "/dist/admin-panel/index.html"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/dist/$1"
+      "dest": "backend/index.js"
     },
     {
       "handle": "filesystem"
     },
     {
       "src": "/admin-panel/.*",
-      "dest": "/dist/admin-panel/index.html"
+      "dest": "/admin-panel/index.html"
     },
     {
       "src": "/.*",
-      "dest": "/dist/index.html"
+      "dest": "/index.html"
     }
   ]
 }
