@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import useStore from '../store/useStore';
-import { LogOut, LayoutDashboard, Crown, Recycle } from 'lucide-react';
+import { LogOut, LayoutDashboard, Crown, Recycle, ShieldCheck } from 'lucide-react';
 
 const Navbar = () => {
   const { user, logout } = useStore();
@@ -38,7 +38,12 @@ const Navbar = () => {
                   </div>
                   <span className="text-sm text-slate-600 font-semibold flex items-center gap-1.5">
                     {user.name} 
-                    {user.isPremium && <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500" title="Premium Enterprise Member" />}
+                    {user.isPremium && (
+                      <>
+                        <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500" title="Enterprise Pro" />
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" title="Verified Enterprise" />
+                      </>
+                    )}
                   </span>
                   <button 
                     onClick={logout}

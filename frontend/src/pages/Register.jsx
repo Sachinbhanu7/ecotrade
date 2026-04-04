@@ -9,7 +9,11 @@ const Register = () => {
     name: '',
     email: '',
     password: '',
-    role: 'buyer'
+    role: 'buyer',
+    kycPhone: '',
+    kycIdType: 'PAN',
+    kycIdNumber: '',
+    kycAddress: '',
   });
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -18,8 +22,16 @@ const Register = () => {
   const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
+    const phoneDigits = formData.kycPhone.replace(/\D/g, '');
+    if (phoneDigits.length !== 10) {
+      setError('Phone number must be exactly 10 digits.');
+      return;
+    }
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/register', formData);
+      const res = await axios.post('http://localhost:5000/api/auth/register', {
+        ...formData,
+        kycPhone: phoneDigits,
+      });
       setUser(res.data.user);
       navigate(res.data.user.role === 'buyer' ? '/dashboard/buyer' : '/dashboard/seller');
     } catch (err) {
@@ -78,6 +90,66 @@ const Register = () => {
               />
             </div>
             
+            <div className="pt-4 border-t border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900 mb-1">KYC verification</h3>
+              <p className="text-xs text-slate-500 mb-4">Required for trading. An admin will review before you can list or bid.</p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Registered phone</label>
+                  <input
+                    type="tel"
+                    required
+                    inputMode="numeric"
+                    minLength={10}
+                    maxLength={10}
+                    pattern="[0-9]{10}"
+                    title="Enter exactly 10 digits"
+                    value={formData.kycPhone}
+                    onChange={(e) => setFormData({ ...formData, kycPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all placeholder:text-slate-400"
+                    placeholder="10-digit mobile number"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Government ID type</label>
+                    <select
+                      value={formData.kycIdType}
+                      onChange={(e) => setFormData({ ...formData, kycIdType: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-green-500 outline-none bg-white"
+                    >
+                      <option value="PAN">PAN</option>
+                      <option value="Aadhaar">Aadhaar</option>
+                      <option value="Driving License">Driving License</option>
+                      <option value="GSTIN">GSTIN</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">ID number</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.kycIdNumber}
+                      onChange={(e) => setFormData({ ...formData, kycIdNumber: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all placeholder:text-slate-400"
+                      placeholder="As on document"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Business / correspondence address</label>
+                  <textarea
+                    required
+                    rows={2}
+                    value={formData.kycAddress}
+                    onChange={(e) => setFormData({ ...formData, kycAddress: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all placeholder:text-slate-400 resize-none"
+                    placeholder="Street, city, state, PIN"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="pt-2">
               <label className="block text-sm font-medium text-slate-700 mb-2">I want to...</label>
               <div className="grid grid-cols-2 gap-4">
