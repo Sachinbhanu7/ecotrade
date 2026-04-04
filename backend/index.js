@@ -11,6 +11,37 @@ admin.initializeApp({
 });
 
 const db = admin.firestore();
+const FieldValue = admin.firestore.FieldValue;
+const { sendNewBidSms } = require('./smsNotify');
+
+const BASIC_LISTING_CAP_PER_MONTH = 5;
+const BASIC_COMMISSION_PCT = 5;
+
+/** Safe JSON for clients (never includes password). */
+function userPublicView(d) {
+  return {
+    id: d.id,
+    name: d.name,
+    email: d.email,
+    role: d.role,
+    isPremium: !!d.isPremium,
+    kycStatus: d.kycStatus ?? null,
+    kycPhone: d.kycPhone ?? null,
+    kycIdType: d.kycIdType ?? null,
+    kycIdNumber: d.kycIdNumber ?? null,
+    kycAddress: d.kycAddress ?? null,
+    kycSubmittedAt: d.kycSubmittedAt ?? null,
+    kycRejectionReason: d.kycRejectionReason ?? null,
+  };
+}
+
+/** Legacy accounts (no KYC submission) stay usable until they re-register flow; new signups require approval. */
+function isKycApproved(data) {
+  if (!data || data.role === 'admin') return true;
+  if (data.kycStatus === 'approved') return true;
+  if (!data.kycSubmittedAt && (data.kycStatus == null || data.kycStatus === undefined)) return true;
+  return false;
+}
 
 const app = express();
 app.use(cors());
@@ -23,7 +54,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, kycPhone, kycIdType, kycIdNumber, kycAddress } = req.body;
     
     // Check if user exists
     const usersRef = db.collection('users');
@@ -31,11 +62,34 @@ app.post('/api/auth/register', async (req, res) => {
     if (!snapshot.empty) {
       return res.status(400).json({ message: "User already exists" });
     }
+
+    if (!kycPhone || !kycIdType || !kycIdNumber || !kycAddress) {
+      return res.status(400).json({ message: "KYC details are required (phone, ID type, ID number, address)." });
+    }
+
+    const phoneDigits = String(kycPhone).replace(/\D/g, '');
+    if (phoneDigits.length !== 10) {
+      return res.status(400).json({ message: "Phone number must be exactly 10 digits." });
+    }
     
     const id = uuidv4();
-    const user = { id, name, email, password, role, isPremium: false };
+    const now = new Date().toISOString();
+    const user = {
+      id,
+      name,
+      email,
+      password,
+      role,
+      isPremium: false,
+      kycPhone: phoneDigits,
+      kycIdType: String(kycIdType).trim(),
+      kycIdNumber: String(kycIdNumber).trim(),
+      kycAddress: String(kycAddress).trim(),
+      kycStatus: 'pending',
+      kycSubmittedAt: now,
+    };
     await usersRef.doc(id).set(user);
-    res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, isPremium: user.isPremium } });
+    res.json({ user: userPublicView(user) });
   } catch(e) { res.status(500).json({error: e.message}); }
 });
 
@@ -45,7 +99,22 @@ app.post('/api/auth/login', async (req, res) => {
     
     // Hardcoded Admin login check
     if (email === 'admin@admin.com' && password === 'admin') {
-       return res.json({ user: { id: 'admin-id', name: 'Super Admin', email, role: 'admin' } });
+       return res.json({
+         user: {
+           id: 'admin-id',
+           name: 'Super Admin',
+           email,
+           role: 'admin',
+           isPremium: false,
+           kycStatus: 'approved',
+           kycPhone: null,
+           kycIdType: null,
+           kycIdNumber: null,
+           kycAddress: null,
+           kycSubmittedAt: null,
+           kycRejectionReason: null,
+         },
+       });
     }
 
     const snapshot = await db.collection('users').where('email', '==', email).where('password', '==', password).get();
@@ -54,7 +123,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
     
     const user = snapshot.docs[0].data();
-    res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, isPremium: user.isPremium } });
+    res.json({ user: userPublicView(user) });
   } catch(e) { res.status(500).json({error: e.message}); }
 });
 
@@ -64,11 +133,51 @@ app.put('/api/users/:id/premium', async (req, res) => {
     const userRef = db.collection('users').doc(id);
     const doc = await userRef.get();
     if (!doc.exists) return res.status(404).json({ message: "Not found" });
+
+    const data = doc.data();
+    if (!isKycApproved(data)) {
+      return res.status(403).json({ message: "Complete KYC verification before upgrading to Premium." });
+    }
     
     await userRef.update({ isPremium: true });
+
+    const listed = await db.collection('items').where('sellerId', '==', id).get();
+    const batch = db.batch();
+    listed.docs.forEach((d) => batch.update(d.ref, { sellerIsPremium: true }));
+    if (!listed.empty) await batch.commit();
     
     const updatedUser = (await userRef.get()).data();
-    res.json({ user: { id: updatedUser.id, name: updatedUser.name, email: updatedUser.email, role: updatedUser.role, isPremium: updatedUser.isPremium } });
+    res.json({ user: userPublicView(updatedUser) });
+  } catch(e) { res.status(500).json({error: e.message}); }
+});
+
+app.get('/api/users/:id', async (req, res) => {
+  try {
+    const doc = await db.collection('users').doc(req.params.id).get();
+    if (!doc.exists) return res.status(404).json({ message: "Not found" });
+    res.json({ user: userPublicView(doc.data()) });
+  } catch(e) { res.status(500).json({error: e.message}); }
+});
+
+app.put('/api/users/:id/kyc', async (req, res) => {
+  try {
+    const { status, rejectionReason } = req.body;
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ message: "status must be 'approved' or 'rejected'" });
+    }
+    const userRef = db.collection('users').doc(req.params.id);
+    const doc = await userRef.get();
+    if (!doc.exists) return res.status(404).json({ message: "Not found" });
+
+    const updates = { kycStatus: status };
+    if (status === 'rejected') {
+      updates.kycRejectionReason = (rejectionReason && String(rejectionReason).trim()) || 'Verification failed. Please contact support with updated documents.';
+    } else {
+      updates.kycRejectionReason = FieldValue.delete();
+    }
+    await userRef.update(updates);
+    const updated = (await userRef.get()).data();
+    res.json({ user: userPublicView(updated) });
   } catch(e) { res.status(500).json({error: e.message}); }
 });
 
@@ -79,7 +188,27 @@ app.put('/api/users/:id/premium', async (req, res) => {
 app.get('/api/items/approved', async (req, res) => {
   try {
     const snap = await db.collection('items').where('status', '==', 'approved').get();
-    res.json(snap.docs.map(d => d.data()));
+    let list = snap.docs.map((d) => d.data());
+    const sellerIds = [...new Set(list.map((i) => i.sellerId).filter(Boolean))];
+    const premiumMap = {};
+    await Promise.all(
+      sellerIds.map(async (sid) => {
+        const u = await db.collection('users').doc(sid).get();
+        if (u.exists) premiumMap[sid] = !!u.data().isPremium;
+      }),
+    );
+    list = list.map((i) => ({
+      ...i,
+      sellerIsPremium: i.sellerIsPremium ?? !!premiumMap[i.sellerId],
+    }));
+    /** Enterprise Pro sellers & premium-tagged listings surface first */
+    list.sort((a, b) => {
+      const score = (x) => (x.sellerIsPremium ? 2 : 0) + (x.isPremium ? 1 : 0);
+      const diff = score(b) - score(a);
+      if (diff !== 0) return diff;
+      return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+    });
+    res.json(list);
   } catch(e) { res.status(500).json({error: e.message}); }
 });
 
@@ -101,14 +230,57 @@ app.get('/api/items/:id', async (req, res) => {
   try {
     const doc = await db.collection('items').doc(req.params.id).get();
     if (!doc.exists) return res.status(404).json({message: "Not found"});
-    res.json(doc.data());
+    const row = doc.data();
+    let sellerIsPremium = row.sellerIsPremium;
+    if (sellerIsPremium === undefined && row.sellerId) {
+      const u = await db.collection('users').doc(row.sellerId).get();
+      sellerIsPremium = u.exists ? !!u.data().isPremium : false;
+    }
+    res.json({ ...row, sellerIsPremium: !!sellerIsPremium });
   } catch(e) { res.status(500).json({error: e.message}); }
 });
 
 app.post('/api/items', async (req, res) => {
   try {
+    const sellerId = req.body.sellerId;
+    if (!sellerId) return res.status(400).json({ message: "sellerId required" });
+    const sellerDoc = await db.collection('users').doc(sellerId).get();
+    if (!sellerDoc.exists) return res.status(404).json({ message: "Seller not found" });
+    if (!isKycApproved(sellerDoc.data())) {
+      return res.status(403).json({ message: "Your account must be KYC-approved by an admin before you can list scrap." });
+    }
+
+    const listingPhoneDigits = String(req.body.phone ?? '').replace(/\D/g, '');
+    if (listingPhoneDigits.length !== 10) {
+      return res.status(400).json({ message: "Listing phone number must be exactly 10 digits." });
+    }
+
+    const sellerData = sellerDoc.data();
+    const sellerPremium = !!sellerData.isPremium;
+    if (!sellerPremium) {
+      const sellerItemsSnap = await db.collection('items').where('sellerId', '==', sellerId).get();
+      const now = new Date();
+      const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const thisMonthCount = sellerItemsSnap.docs.filter((doc) => {
+        const c = doc.data().createdAt;
+        return typeof c === 'string' && c.slice(0, 7) === ym;
+      }).length;
+      if (thisMonthCount >= BASIC_LISTING_CAP_PER_MONTH) {
+        return res.status(403).json({
+          message: 'Basic plan allows up to 5 new listings per calendar month. Upgrade to Enterprise Pro for unlimited listings.',
+        });
+      }
+    }
+
     const id = uuidv4();
-    const item = { ...req.body, id, status: 'pending', createdAt: new Date().toISOString() };
+    const item = {
+      ...req.body,
+      phone: listingPhoneDigits,
+      id,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      sellerIsPremium: sellerPremium,
+    };
     if (!item.isPremium) item.isPremium = false;
     await db.collection('items').doc(id).set(item);
     res.json(item);
@@ -141,7 +313,11 @@ app.put('/api/items/:id/premium', async (req, res) => {
 app.get('/api/users', async (req, res) => {
   try {
     const snap = await db.collection('users').get();
-    res.json(snap.docs.map(d => d.data()));
+    res.json(snap.docs.map((d) => {
+      const u = d.data();
+      const { password: _p, ...rest } = u;
+      return rest;
+    }));
   } catch(e) { res.status(500).json({error: e.message}); }
 });
 
@@ -158,9 +334,34 @@ app.get('/api/bids', async (req, res) => {
 
 app.post('/api/bids', async (req, res) => {
   try {
+    const buyerId = req.body.buyerId;
+    if (!buyerId) return res.status(400).json({ message: "buyerId required" });
+    const buyerDoc = await db.collection('users').doc(buyerId).get();
+    if (!buyerDoc.exists) return res.status(404).json({ message: "Buyer not found" });
+    if (!isKycApproved(buyerDoc.data())) {
+      return res.status(403).json({ message: "Your account must be KYC-approved by an admin before you can place bids." });
+    }
+
+    const itemId = req.body.itemId;
+    if (!itemId) return res.status(400).json({ message: 'itemId required' });
+    const itemRef = db.collection('items').doc(itemId);
+    const itemSnap = await itemRef.get();
+    if (!itemSnap.exists) return res.status(404).json({ message: 'Listing not found' });
+    const itemRow = itemSnap.data();
+    if (itemRow.status !== 'approved') {
+      return res.status(400).json({ message: 'Bids are only allowed on approved listings.' });
+    }
+
     const id = uuidv4();
     const bid = { ...req.body, id, status: 'pending', createdAt: new Date().toISOString() };
     await db.collection('bids').doc(id).set(bid);
+
+    sendNewBidSms({
+      toDigits: itemRow.phone,
+      itemTitle: itemRow.title,
+      amount: bid.amount,
+    }).catch((err) => console.error('[EcoTrade SMS]', err.message));
+
     res.json(bid);
   } catch(e) { res.status(500).json({error: e.message}); }
 });
@@ -210,10 +411,27 @@ app.put('/api/bids/:id/status', async (req, res) => {
     if (!bidDoc.exists) return res.status(404).json({ message: "Not found" });
     
     const bid = bidDoc.data();
-    await bidRef.update({ status: req.body.status });
+    const newStatus = req.body.status;
+    const updates = { status: newStatus };
+
+    if (newStatus === 'accepted') {
+      const itemRef = db.collection('items').doc(bid.itemId);
+      const itemSnap = await itemRef.get();
+      const itemRow = itemSnap.exists ? itemSnap.data() : {};
+      const sellerSnap = itemRow.sellerId ? await db.collection('users').doc(itemRow.sellerId).get() : null;
+      const sellerPremium = sellerSnap && sellerSnap.exists && !!sellerSnap.data().isPremium;
+      const pct = sellerPremium ? 0 : BASIC_COMMISSION_PCT;
+      const amount = Number(bid.amount) || 0;
+      const commissionAmount = Math.round((amount * pct) / 100);
+      updates.commissionPct = pct;
+      updates.commissionAmount = commissionAmount;
+      updates.netToSeller = amount - commissionAmount;
+    }
+
+    await bidRef.update(updates);
     
     // Auto-reject other bids for this item and mark item sold
-    if (req.body.status === 'accepted') {
+    if (newStatus === 'accepted') {
       const itemRef = db.collection('items').doc(bid.itemId);
       await itemRef.update({ status: 'sold' });
       
@@ -239,12 +457,14 @@ app.get('/api/stats', async (req, res) => {
     const items = (await db.collection('items').count().get()).data().count;
     const pending = (await db.collection('items').where('status', '==', 'pending').count().get()).data().count;
     const bids = (await db.collection('bids').count().get()).data().count;
+    const pendingKyc = (await db.collection('users').where('kycStatus', '==', 'pending').count().get()).data().count;
     
     res.json({
       totalUsers: users,
       totalItems: items,
       pendingApprovals: pending,
-      totalBids: bids
+      totalBids: bids,
+      pendingKyc,
     });
   } catch(e) { res.status(500).json({error: e.message}); }
 });
