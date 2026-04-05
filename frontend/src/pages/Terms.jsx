@@ -4,9 +4,9 @@ const Terms = () => (
     <div className="prose prose-slate bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
       <p className="lead">Last updated: April 3, 2026</p>
       <h3>1. Acceptance of Terms</h3>
-      <p>By accessing ScrapChain, you agree to these terms. Only verified industrial entities are permitted to trade.</p>
+      <p>By accessing EcoTrade, you agree to these terms. Only verified industrial entities are permitted to trade.</p>
       <h3>2. Trading & Bidding Rules</h3>
-      <p>All bids placed are binding. Sellers reserve the right to accept or reject any bid at their sole discretion. ScrapChain is not liable for transport logistics unless specifically negotiated.</p>
+      <p>All bids placed are binding. Sellers reserve the right to accept or reject any bid at their sole discretion. EcoTrade is not liable for transport logistics unless specifically negotiated.</p>
       <h3>3. Premium Subscriptions</h3>
       <p>Premium plans are billed monthly. No refunds are provided for partial months.</p>
     </div>

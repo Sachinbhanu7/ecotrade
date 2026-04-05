@@ -7,6 +7,7 @@ import SellerDashboard from './pages/SellerDashboard';
 import Premium from './pages/Premium';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
+import Contact from './pages/Contact';
 import Navbar from './components/Navbar';
 import { Footer } from './components/Footer';
 import useStore from './store/useStore';
@@ -25,7 +26,7 @@ function App() {
           
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
-          <Route path="/contact" element={<Navigate to="/" />} />
+          <Route path="/contact" element={<Contact />} />
           
           {/* Protected Routes */}
           <Route path="/dashboard/buyer" element={user ? <BuyerDashboard /> : <Navigate to="/login" />} />
