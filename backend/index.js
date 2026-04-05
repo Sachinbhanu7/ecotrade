@@ -275,6 +275,15 @@ app.get('/api/stats', async (req, res) => {
   } catch(e) { res.status(500).json({error: e.message}); }
 });
 
+app.post('/api/contact', async (req, res) => {
+  try {
+    const id = crypto.randomUUID();
+    const contactMsg = { ...req.body, id, createdAt: new Date().toISOString() };
+    await db.collection('contacts').doc(id).set(contactMsg);
+    res.json({ success: true, message: "Contact message saved successfully." });
+  } catch(e) { res.status(500).json({error: e.message}); }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Firebase Backend running on port ${PORT}`);

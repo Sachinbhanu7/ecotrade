@@ -1,6 +1,23 @@
+import { useState } from 'react';
 import { Mail, Phone, MapPin } from 'lucide-react';
+import axios from 'axios';
 
 const Contact = () => {
+  const [formData, setFormData] = useState({ company: '', email: '', message: '' });
+  const [status, setStatus] = useState({ loading: false, success: false, error: null });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setStatus({ loading: true, success: false, error: null });
+    try {
+      await axios.post('/api/contact', formData);
+      setStatus({ loading: false, success: true, error: null });
+      setFormData({ company: '', email: '', message: '' });
+      setTimeout(() => setStatus(s => ({ ...s, success: false })), 5000);
+    } catch (err) {
+      setStatus({ loading: false, success: false, error: 'Failed to send message.' });
+    }
+  };
   return (
     <div className="max-w-4xl mx-auto px-4 py-16">
       <h1 className="text-4xl font-bold mb-8 text-slate-900 text-center">Contact Us</h1>
@@ -50,21 +67,27 @@ const Contact = () => {
           </div>
           
           <div>
-            <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); alert('We have received your message. Our team will contact you shortly!'); }}>
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              {status.success && (
+                <div className="bg-green-50 text-green-700 px-4 py-3 rounded-xl text-sm font-medium">Message sent successfully!</div>
+              )}
+              {status.error && (
+                <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-medium">{status.error}</div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Company Name</label>
-                <input type="text" required className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-green-500 outline-none" placeholder="Your Company Ltd" />
+                <input type="text" required value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-green-500 outline-none" placeholder="Your Company Ltd" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Work Email</label>
-                <input type="email" required className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-green-500 outline-none" placeholder="john@company.com" />
+                <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-green-500 outline-none" placeholder="john@company.com" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Message</label>
-                <textarea required rows="4" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-green-500 outline-none" placeholder="How can we help?"></textarea>
+                <textarea required rows="4" value={formData.message} onChange={e => setFormData({...formData, message: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-green-500 outline-none" placeholder="How can we help?"></textarea>
               </div>
-              <button type="submit" className="w-full bg-green-600 text-white font-semibold py-3 rounded-xl hover:bg-green-700 transition-colors">
-                Send Message
+              <button type="submit" disabled={status.loading} className="w-full bg-green-600 text-white font-semibold py-3 rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50">
+                {status.loading ? 'Sending...' : 'Send Message'}
               </button>
             </form>
           </div>
