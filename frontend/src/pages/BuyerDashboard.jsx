@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import useStore from '../store/useStore';
-import { IndianRupee, MapPin, Tag, Filter, LockKeyhole, Crown, X, Info, LayoutTemplate, Activity, User } from 'lucide-react';
+import { IndianRupee, MapPin, Tag, Filter, LockKeyhole, Crown, X, Info, LayoutTemplate, Activity, User, ShieldCheck } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import PickupLocationMap from '../components/PickupLocationMap';
+import KycAccountGate from '../components/KycAccountGate';
 
 const BuyerDashboard = () => {
   const [items, setItems] = useState([]);
@@ -60,7 +62,7 @@ const BuyerDashboard = () => {
       fetchData();
       alert("Bid Placed Successfully! Returning to view.");
     } catch (error) {
-      alert("Failed to place bid");
+      alert(error.response?.data?.message || 'Failed to place bid');
     }
   };
 
@@ -91,6 +93,11 @@ const BuyerDashboard = () => {
             <span className="px-3 py-1 bg-white/95 backdrop-blur text-xs font-bold rounded-full shadow border border-white/20 text-slate-800 flex items-center gap-1 uppercase tracking-wide">
               {item.category}
             </span>
+            {item.sellerIsPremium && (
+              <span className="px-3 py-1 bg-violet-600/95 text-white backdrop-blur text-xs font-bold rounded-full shadow flex items-center gap-1 uppercase">
+                <ShieldCheck className="w-3 h-3" /> Pro seller
+              </span>
+            )}
             {item.isPremium && (
               <span className="px-3 py-1 bg-amber-500/90 text-white backdrop-blur text-xs font-bold rounded-full shadow flex items-center gap-1 uppercase">
                 <Crown className="w-3 h-3" /> Premium
@@ -141,6 +148,7 @@ const BuyerDashboard = () => {
   };
 
   return (
+    <KycAccountGate>
     <div className="max-w-7xl mx-auto px-4 py-8">
       
       {/* Dashboard Navigation */}
@@ -168,7 +176,12 @@ const BuyerDashboard = () => {
           
           <div className="flex justify-center gap-4 mb-8">
             <span className="bg-slate-100 text-slate-700 px-4 py-1.5 rounded-full text-sm font-bold uppercase tracking-widest">{user.role} Account</span>
-            {user.isPremium && <span className="bg-amber-100 text-amber-700 px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-1 uppercase tracking-widest"><Crown className="w-4 h-4"/> Premium</span>}
+            {user.isPremium && (
+              <>
+                <span className="bg-amber-100 text-amber-700 px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-1 uppercase tracking-widest"><Crown className="w-4 h-4"/> Enterprise Pro</span>
+                <span className="bg-emerald-50 text-emerald-800 px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-1 uppercase tracking-widest border border-emerald-200"><ShieldCheck className="w-4 h-4"/> Verified</span>
+              </>
+            )}
           </div>
 
           {user.role === 'buyer' && (
@@ -209,7 +222,7 @@ const BuyerDashboard = () => {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6">
             <div>
               <h1 className="text-3xl font-bold text-slate-900 mb-2">Available Scrap Listings</h1>
-              <p className="text-slate-500">Browse verified listings and place your competitive bids.</p>
+              <p className="text-slate-500">Enterprise Pro sellers and premium listings appear first. Basic sellers pay a 5% platform fee on accepted bids; Pro sellers pay 0%.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {['All', 'Metal', 'Plastic', 'Copper', 'E-Waste', 'Paper'].map(cat => (
@@ -276,6 +289,19 @@ const BuyerDashboard = () => {
                       <p className="font-medium text-slate-800 text-sm">{selectedItem.address}</p>
                     </div>
                  </div>
+                 {selectedItem.lat != null && selectedItem.lng != null && (
+                   <div className="rounded-2xl border border-slate-200 overflow-hidden bg-slate-50">
+                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider px-4 pt-3 pb-2">Location on map</p>
+                     <div className="px-4 pb-4">
+                       <PickupLocationMap
+                         readOnly
+                         lat={selectedItem.lat}
+                         lng={selectedItem.lng}
+                         height={200}
+                       />
+                     </div>
+                   </div>
+                 )}
                </div>
                
                <div className="mt-auto border-t border-slate-200 pt-8">
@@ -285,7 +311,21 @@ const BuyerDashboard = () => {
                    const isSold = selectedItem.status === 'sold' && !hasWinningBid;
 
                    if (user.role === 'seller') return <div className="bg-amber-50 border border-amber-200 text-amber-800 p-6 rounded-2xl text-center"><h3 className="text-xl font-bold mb-2">Login Required</h3><p>You are viewing this as a Seller. Please use a Buyer account to place bids.</p></div>;
-                   if (hasWinningBid) return <div className="bg-green-100 border border-green-300 text-green-800 p-6 rounded-2xl text-center"><h3 className="text-2xl font-bold mb-2">🎉 Deal Finalized!</h3><p>The seller accepted your bid of ₹{myBids.find(b=>b.status==='accepted').amount.toLocaleString()}. They will contact you shortly.</p></div>;
+                   if (hasWinningBid) {
+                     const winBid = myBids.find(b => b.status === 'accepted');
+                     return (
+                       <div className="bg-green-100 border border-green-300 text-green-800 p-6 rounded-2xl text-center space-y-2">
+                         <h3 className="text-2xl font-bold mb-2">🎉 Deal Finalized!</h3>
+                         <p>The seller accepted your bid of ₹{winBid.amount.toLocaleString()}. They will contact you shortly.</p>
+                         {winBid.commissionPct != null && (
+                           <p className="text-sm text-green-900/90 pt-2 border-t border-green-300/50">
+                             Seller platform fee on this sale: <strong>{winBid.commissionPct}%</strong>
+                             {winBid.commissionAmount > 0 ? ` (₹${winBid.commissionAmount.toLocaleString()})` : ' — Enterprise Pro seller, so no commission.'}
+                           </p>
+                         )}
+                       </div>
+                     );
+                   }
                    if (myBids.some(b => b.status === 'rejected')) return <div className="bg-red-50 border border-red-200 text-red-800 p-6 rounded-2xl text-center"><h3 className="text-xl font-bold mb-2">Bid Rejected</h3><p>Unfortunately, the seller declined your bid of ₹{myBids.find(b=>b.status==='rejected').amount.toLocaleString()}.</p></div>;
                    if (isSold) return <div className="bg-slate-100 border border-slate-300 text-slate-600 p-6 rounded-2xl text-center"><h3 className="text-2xl font-bold">Sold Out</h3><p>This item has already been secured by another buyer.</p></div>;
                    
@@ -311,7 +351,8 @@ const BuyerDashboard = () => {
                             Submit Bid
                           </button>
                         </div>
-                        <p className="text-xs text-slate-500 text-center mt-4">By placing a bid, you agree to the Terms of Service. Bids cannot be retracted once the seller accepts.</p>
+                        <p className="text-xs text-slate-500 text-center mt-3">The seller gets an <strong>SMS</strong> on the listing phone when you bid (server logs a demo message unless Twilio env vars are set).</p>
+                        <p className="text-xs text-slate-500 text-center mt-2">By placing a bid, you agree to the Terms of Service. Bids cannot be retracted once the seller accepts.</p>
                       </div>
                    );
                  })()}
@@ -321,6 +362,7 @@ const BuyerDashboard = () => {
         </div>
       )}
     </div>
+    </KycAccountGate>
   );
 };
 
