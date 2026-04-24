@@ -17,7 +17,11 @@ const Login = () => {
     try {
       const res = await axios.post('/api/auth/login', { email, password });
       setUser(res.data.user);
-      navigate(res.data.user.role === 'buyer' ? '/dashboard/buyer' : '/dashboard/seller');
+      if (res.data.user.role === 'admin') {
+        window.location.href = '/admin-panel';
+      } else {
+        navigate(res.data.user.role === 'buyer' ? '/dashboard/buyer' : '/dashboard/seller');
+      }
     } catch (err) {
       const errMsg = err.response?.data?.error || err.response?.data?.message || 'Invalid credentials';
       setError(typeof errMsg === 'string' ? errMsg : 'Invalid credentials');
