@@ -25,7 +25,7 @@ export default function KycAccountGate({ children }) {
   const refreshStatus = async () => {
     setRefreshing(true);
     try {
-      const res = await axios.get(`http://localhost:5000/api/users/${user.id}`);
+      const res = await axios.get(`/api/users/${user.id}`);
       setUser(res.data.user);
     } catch {
       alert('Could not refresh. Try again shortly.');
