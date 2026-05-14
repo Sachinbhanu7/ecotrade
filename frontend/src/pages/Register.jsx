@@ -13,15 +13,19 @@ const Register = () => {
     kycPhone: '',
     kycIdType: 'PAN',
     kycIdNumber: '',
+    kycIdNumber: '',
     kycAddress: '',
   });
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const { setUser } = useStore();
 
   const handleRegister = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError('');
+    setIsSubmitting(true);
     const phoneDigits = formData.kycPhone.replace(/\D/g, '');
     if (phoneDigits.length !== 10) {
       setError('Phone number must be exactly 10 digits.');
@@ -37,6 +41,7 @@ const Register = () => {
     } catch (err) {
       const errMsg = err.response?.data?.error || err.response?.data?.message || 'Registration failed';
       setError(typeof errMsg === 'string' ? errMsg : 'Registration failed');
+      setIsSubmitting(false);
     }
   };
 
@@ -167,9 +172,10 @@ const Register = () => {
             
             <button 
               type="submit" 
-              className="w-full bg-slate-900 text-white font-semibold py-3 rounded-xl hover:bg-slate-800 transition-colors shadow-md mt-6"
+              disabled={isSubmitting}
+              className="w-full bg-slate-900 text-white font-semibold py-3 rounded-xl hover:bg-slate-800 transition-colors shadow-md mt-6 disabled:opacity-50"
             >
-              Create Account
+              {isSubmitting ? 'Creating Account...' : 'Create Account'}
             </button>
           </form>
 

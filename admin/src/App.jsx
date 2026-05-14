@@ -99,7 +99,7 @@ const Dashboard = ({ setAuth }) => {
       rejectionReason = window.prompt('Optional message shown to the user on their dashboard:') ?? '';
     }
     try {
-      await axios.put(`http://localhost:5000/api/users/${userId}/kyc`, { status, rejectionReason });
+      await axios.put(`/api/users/${userId}/kyc`, { status, rejectionReason });
       fetchData();
     } catch (e) {
       alert('Could not update KYC status');
